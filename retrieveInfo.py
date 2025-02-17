@@ -65,7 +65,7 @@ def load_json_file(filename):
         return None
 
 # Load Instagram data from file
-instagram_data = load_json_file("./instagram_post_data.json")
+instagram_data = load_json_file("./instagram_data.json")
 if instagram_data:
     # Extract Instagram metrics
     instagram_metrics = extract_instagram_metrics(instagram_data)
@@ -90,7 +90,7 @@ if instagram_data:
     print("Instagram metrics have been written to CSV file.")
 
     # Delete the Instagram JSON file after processing
-    os.remove("./instagram_post_data.json")
+    os.remove("./instagram_data.json")
     print("Instagram JSON file has been deleted.")
 
 # Load TikTok data from file
