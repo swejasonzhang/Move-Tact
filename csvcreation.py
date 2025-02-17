@@ -1,7 +1,9 @@
 import os
+import subprocess
 import requests
 import re
 import json
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -65,6 +67,26 @@ def save_as_json(data, filename):
     with open(filename, "w") as f:
         json.dump(data, f, indent=4)
     print(f"Data saved to {filename}")
+
+    # Wait for the .json file to become active
+    wait_for_file(filename)
+
+    # Run the retrieveInfo.py script after saving the data
+    run_retrieve_info_script()
+
+def wait_for_file(filename):
+    # Wait for the file to be created and active
+    while not os.path.exists(filename) or os.path.getsize(filename) == 0:
+        time.sleep(1)  # Check every second
+    # No print statement; silently return if the file doesn't exist or is empty
+
+def run_retrieve_info_script():
+    try:
+        # Run the retrieveInfo.py script
+        subprocess.run(["python", "retrieveInfo.py"], check=True)
+        print("retrieveInfo.py executed successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing retrieveInfo.py: {e}")
 
 def main():
     url = input("Enter a TikTok or Instagram video URL: ")

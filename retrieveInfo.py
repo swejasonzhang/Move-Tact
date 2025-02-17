@@ -1,114 +1,127 @@
 import json
+import csv
 import os
-from openai import OpenAI
 
-# Load the OpenAI API key from environment variables
-api_key = os.getenv('OPENAI_API_KEY')
-if not api_key:
-    raise ValueError("Please set the OPENAI_API_KEY environment variable.")
+# Function to extract Instagram metrics
+def extract_instagram_metrics(data):
+    post_data = data.get("data", {})
+    
+    metrics = {
+        "id": post_data.get("id"),
+        "shortcode": post_data.get("shortcode"),
+        "is_video": post_data.get("is_video"),
+        "likes": post_data.get("edge_media_preview_like", {}).get("count", 0),
+        "comments": post_data.get("edge_media_preview_comment", {}).get("count", 0),
+        "views": post_data.get("video_view_count") if post_data.get("is_video") else None,
+        "caption": post_data.get("edge_media_to_caption", {}).get("edges", [{}])[0].get("node", {}).get("text", ""),
+        "owner": {
+            "username": post_data.get("owner", {}).get("username"),
+            "full_name": post_data.get("owner", {}).get("full_name"),
+            "is_verified": post_data.get("owner", {}).get("is_verified"),
+        },
+        "thumbnail_url": post_data.get("thumbnail_src"),
+        "display_url": post_data.get("display_url"),
+        "timestamp": post_data.get("taken_at_timestamp"),
+        "shares": None, 
+    }
 
-# Initialize the OpenAI client
-client = OpenAI(api_key=api_key)
+    return metrics
 
-def retrieveInfo(json_data):
-    """
-    Processes JSON data to extract relevant video metrics using OpenAI's GPT-3.5-turbo.
-    Splits the data into two parts to handle large inputs and combines the results.
-    """
-    def split_data(data):
-        """
-        Splits the JSON data into two parts for processing.
-        Handles both dictionaries and lists.
-        """
-        if isinstance(data, dict):
-            items = list(data.items())
-        elif isinstance(data, list):
-            items = data
-        else:
-            raise ValueError("Unsupported JSON data format. Expected dict or list.")
+# Function to extract TikTok metrics
+def extract_tiktok_metrics(data):
+    video_data = data.get("data", [])[0]
 
-        # Split the data into two equal parts
-        mid = len(items) // 2
-        return items[:mid], items[mid:]
+    metrics = {
+        "id": video_data.get("aweme_id"),
+        "description": video_data.get("desc", ""),
+        "likes": video_data.get("statistics", {}).get("digg_count", 0),
+        "comments": video_data.get("statistics", {}).get("comment_count", 0),
+        "views": video_data.get("statistics", {}).get("play_count", 0),
+        "shares": video_data.get("statistics", {}).get("share_count", 0),
+        "reposts": video_data.get("statistics", {}).get("repost_count", 0),
+        "music": {
+            "title": video_data.get("music", {}).get("title", ""),
+            "artist": video_data.get("music", {}).get("author", ""),
+        },
+        "owner": {
+            "username": video_data.get("author", {}).get("unique_id", ""),
+            "nickname": video_data.get("author", {}).get("nickname", ""),
+            "verified": video_data.get("author", {}).get("verification_type", 0) == 1,
+        },
+        "video_url": video_data.get("video", {}).get("play_addr", {}).get("url_list", [None])[0],
+        "thumbnail_url": video_data.get("video", {}).get("cover", {}).get("url_list", [None])[0],
+        "timestamp": video_data.get("create_time"),
+    }
 
-    def truncate_data(data, max_tokens=15000):
-        """
-        Truncates the data to fit within the model's token limit.
-        Assumes 1 token ≈ 4 characters.
-        """
-        data_str = json.dumps(data)
-        max_length = max_tokens * 4  # Calculate max allowed characters
-        if len(data_str) > max_length:
-            data_str = data_str[:max_length]
-            data = json.loads(data_str)
-        return data
+    return metrics
 
-    def call_openai_api(data_part):
-        """
-        Calls the OpenAI API to process the data and extract relevant metrics.
-        """
-        prompt_template = """
-        The following is a JSON representation of a video (YouTube, TikTok, or Instagram). Extract the most relevant metrics and return them in a clean, structured JSON format.
-
-        Extract the following information:
-        1. Likes: The number of likes on the video.
-        2. Comments: The number of comments on the video.
-        3. Views: The number of views the video has.
-        4. Song Name: If available, the name of the song associated with the video.
-        5. Artist: If the song name is available, include the artist's name.
-        6. Shares: The number of times the video has been shared.
-        7. Any other relevant video statistics: If there are additional key metrics such as shares, reposts, or engagement scores, include them as well.
-
-        JSON Data: {json_data}
-        """
-
-        try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt_template.replace("{json_data}", json.dumps(data_part))}
-                ],
-                max_tokens=200,
-                temperature=0.5
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"Error calling OpenAI API: {e}")
-            return None
-
-    # Split the JSON data into two parts
-    try:
-        data_part_1, data_part_2 = split_data(json_data)
-    except ValueError as e:
-        print(f"Error splitting data: {e}")
+# Function to load JSON data if the file exists
+def load_json_file(filename):
+    if os.path.exists(filename):
+        with open(filename, "r") as file:
+            return json.load(file)
+    else:
+        print(f"File {filename} does not exist.")
         return None
 
-    # Truncate each part to fit within the token limit
-    data_part_1 = truncate_data(data_part_1)
-    data_part_2 = truncate_data(data_part_2)
+# Load Instagram data from file
+instagram_data = load_json_file("./instagram_post_data.json")
+if instagram_data:
+    # Extract Instagram metrics
+    instagram_metrics = extract_instagram_metrics(instagram_data)
 
-    # Get responses for both parts
-    filtered_data_part_1 = call_openai_api(data_part_1)
-    filtered_data_part_2 = call_openai_api(data_part_2)
+    # Write Instagram metrics to CSV
+    instagram_csv_file_path = "instagram_metrics.csv"
+    instagram_header = [
+        "id", "shortcode", "is_video", "likes", "comments", "views", 
+        "caption", "owner_username", "owner_full_name", "owner_is_verified", 
+        "thumbnail_url", "display_url", "timestamp", "shares"
+    ]
 
-    if not filtered_data_part_1 or not filtered_data_part_2:
-        print("Error: One or both parts of the data could not be processed.")
-        return None
+    with open(instagram_csv_file_path, mode="w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=instagram_header)
+        writer.writeheader()
+        instagram_metrics["owner_username"] = instagram_metrics["owner"].get("username")
+        instagram_metrics["owner_full_name"] = instagram_metrics["owner"].get("full_name")
+        instagram_metrics["owner_is_verified"] = instagram_metrics["owner"].get("is_verified")
+        del instagram_metrics["owner"]  # Remove nested "owner" dict
+        writer.writerow(instagram_metrics)
 
-    try:
-        # Safely parse the responses into JSON
-        result_part_1 = json.loads(filtered_data_part_1)
-        result_part_2 = json.loads(filtered_data_part_2)
+    print("Instagram metrics have been written to CSV file.")
 
-        # Combine the two parts of the results without overwriting keys
-        combined_results = {**result_part_1, **result_part_2}
+    # Delete the Instagram JSON file after processing
+    os.remove("./instagram_post_data.json")
+    print("Instagram JSON file has been deleted.")
 
-        return combined_results
+# Load TikTok data from file
+tiktok_data = load_json_file("./tiktok_data.json")
+if tiktok_data:
+    # Extract TikTok metrics
+    tiktok_metrics = extract_tiktok_metrics(tiktok_data)
 
-    except json.JSONDecodeError as e:
-        print(f"Error parsing OpenAI response into JSON: {e}")
-        return None
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return None
+    # Write TikTok metrics to CSV
+    tiktok_csv_file_path = "tiktok_metrics.csv"
+    tiktok_header = [
+        "id", "description", "likes", "comments", "views", "shares", 
+        "reposts", "music_title", "music_artist", 
+        "owner_username", "owner_nickname", "owner_verified", 
+        "video_url", "thumbnail_url", "timestamp"
+    ]
+
+    with open(tiktok_csv_file_path, mode="w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=tiktok_header)
+        writer.writeheader()
+        tiktok_metrics["music_title"] = tiktok_metrics["music"].get("title")
+        tiktok_metrics["music_artist"] = tiktok_metrics["music"].get("artist")
+        del tiktok_metrics["music"]  # Remove nested "music" dict
+        tiktok_metrics["owner_username"] = tiktok_metrics["owner"].get("username")
+        tiktok_metrics["owner_nickname"] = tiktok_metrics["owner"].get("nickname")
+        tiktok_metrics["owner_verified"] = tiktok_metrics["owner"].get("verified")
+        del tiktok_metrics["owner"]  # Remove nested "owner" dict
+        writer.writerow(tiktok_metrics)
+
+    print("TikTok metrics have been written to CSV file.")
+
+    # Delete the TikTok JSON file after processing
+    os.remove("./tiktok_data.json")
+    print("TikTok JSON file has been deleted.")
