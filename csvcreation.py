@@ -1,113 +1,79 @@
 import os
-from dotenv import load_dotenv
 import requests
 import re
 import json
+from dotenv import load_dotenv
 
 load_dotenv()
 
 ENSEMBLE_API_KEY = os.getenv("ENSEMBLE_API_KEY")
 ENSEMBLE_ROOT = os.getenv("ENSEMBLE_ROOT")
 
-# Function to determine platform (TikTok or Instagram)
 def get_platform(url):
     if "tiktok.com" in url:
         return "tiktok"
-    elif "instagram.com" in url:
+    if "instagram.com" in url:
         return "instagram"
     return None
 
-# Function to determine content type (post, slideshow, or reel)
 def get_content_type(url):
-    if "tiktok.com" in url:
-        if "/video/" in url:
-            return "post"
-        elif "/slideshow/" in url:
-            return "slideshow"
-    elif "instagram.com" in url:
-        if "/reel/" in url:
-            return "reel"
-        elif "/p/" in url:
-            return "post"
+    if "tiktok.com" in url and "/video/" in url:
+        return "video"
+    if "instagram.com" in url and "/p/" in url:
+        return "post"
     return None
 
-# Function to fetch video data (TikTok or Instagram)
 def fetch_video_data(url):
-    platform = get_platform(url)
+    platform = get_platform(url) 
     content_type = get_content_type(url)
     
     if not platform or not content_type:
-        print("Unsupported platform or content type.")
-        return None
+        return {"error": "Unsupported platform or content type."}
     
-    headers = {"Authorization": f"Bearer {ENSEMBLE_API_KEY}"}
-    params = {"url": url, "token": ENSEMBLE_API_KEY}
-    
-    if platform == "tiktok":
-        video_id = extract_tiktok_video_id(url)
-        if not video_id:
-            print("Could not extract TikTok video ID.")
-            return None
-        params["id"] = video_id
-        if content_type == "post":
-            endpoint = "/tt/post/info"
-        elif content_type == "slideshow":
-            endpoint = "/tt/slideshow/info"
-    elif platform == "instagram":
-        video_id = extract_instagram_video_id(url)
-        if not video_id:
-            print("Could not extract Instagram video ID.")
-            return None
-        params["id"] = video_id
-        if content_type == "post":
-            endpoint = "/ig/post/info"
-        elif content_type == "reel":
-            endpoint = "/ig/reel/info"
-    else:
-        print("Unsupported platform.")
-        return None
-    
-    print(f"Fetching data for URL: {url}")
-    response = requests.get(f"{ENSEMBLE_ROOT}{endpoint}", headers=headers, params=params)
-    
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Failed to fetch video metadata: {response.json()}")
-        return None
+    return fetch_tiktok_data(url) if platform == "tiktok" else fetch_instagram_data(url)
 
-# Function to extract TikTok video ID
-def extract_tiktok_video_id(url):
-    match = re.search(r"tiktok.com/@[\w-]+/(video|slideshow)/(\d+)", url)
-    if match:
-        return match.group(2)
-    return None
+def fetch_tiktok_data(url):
+    response = requests.get(f"{ENSEMBLE_ROOT}/tt/post/info", params={"url": url, "token": ENSEMBLE_API_KEY})
+    return handle_response(response)
 
-# Function to extract Instagram video ID
+def fetch_instagram_data(url):
+    video_id = extract_instagram_video_id(url)
+    if not video_id:
+        return {"error": "Could not extract Instagram video ID."}
+    
+    response = requests.get(
+        f"{ENSEMBLE_ROOT}/instagram/post/details",
+        params={"code": video_id, "n_comments_to_fetch": 0, "token": ENSEMBLE_API_KEY}
+    )
+    return handle_response(response)
+
+def handle_response(response):
+    try:
+        return response.json() if response.status_code == 200 else {"error": f"Failed: {response.status_code}"}
+    except json.JSONDecodeError:
+        return {"error": "Invalid JSON response."}
+
 def extract_instagram_video_id(url):
-    match = re.search(r"instagram\.com/(reels|p)/([\w-]+)", url)
-    if match:
-        return match.group(2)
-    return None
+    match = re.search(r"instagram\.com/p/([\w-]+)", url)
+    return match.group(1) if match else None
 
-# Function to save data as a JSON file
 def save_as_json(data, filename):
+    if "error" in data:
+        print(f"Error: {data['error']}")
+        return
+    
     with open(filename, "w") as f:
         json.dump(data, f, indent=4)
     print(f"Data saved to {filename}")
 
-# Main function to handle user input and fetch data
 def main():
-    video_url = input("Enter a TikTok or Instagram video URL: ")
-    video_data = fetch_video_data(video_url)
+    url = input("Enter a TikTok or Instagram video URL: ")
+    data = fetch_video_data(url)
     
-    if video_data:
-        platform = get_platform(video_url)
-        content_type = get_content_type(video_url)
-        filename = f"{platform}_{content_type}_data.json"
-        save_as_json(video_data, filename)
+    if "error" not in data:
+        save_as_json(data, f"{get_platform(url)}_data.json")
     else:
-        print("No data fetched.")
+        print(f"Error: {data['error']}")
 
 if __name__ == "__main__":
     main()
