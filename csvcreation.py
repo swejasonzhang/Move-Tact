@@ -1,123 +1,127 @@
-import os
-import subprocess
-import requests
-import re
 import json
-import time
-from dotenv import load_dotenv
+import csv
+import os
 
-load_dotenv()
-
-ENSEMBLE_API_KEY = os.getenv("ENSEMBLE_API_KEY")
-ENSEMBLE_ROOT = os.getenv("ENSEMBLE_ROOT")
-
-def get_platform(url):
-    if "tiktok.com" in url:
-        return "tiktok"
-    if "instagram.com" in url:
-        return "instagram"
-    return None
-
-def get_content_type(url):
-    if "tiktok.com" in url:
-        if "/video/" in url:
-            return "video"
-        if "/photo/" in url:
-            return "photo"
-    if "instagram.com" in url:
-        if "/p/" in url:
-            return "post"
-        if "/reel/" in url or "/reels/" in url:
-            return "reel"
-    return None
-
-def fetch_video_data(url):
-    platform = get_platform(url) 
-    content_type = get_content_type(url)
+# Function to extract Instagram metrics
+def extract_instagram_metrics(data):
+    post_data = data.get("data", {})
     
-    if not platform or not content_type:
-        return {"error": "Unsupported platform or content type."}
-    
-    if platform == "tiktok":
-        return fetch_tiktok_video_data(url) if content_type == "video" else fetch_tiktok_photo_data(url)
-    elif platform == "instagram":
-        return fetch_instagram_post_data(url) if content_type == "post" else fetch_instagram_reel_data(url)
+    metrics = {
+        "id": post_data.get("id"),
+        "shortcode": post_data.get("shortcode"),
+        "is_video": post_data.get("is_video"),
+        "likes": post_data.get("edge_media_preview_like", {}).get("count", 0),
+        "comments": post_data.get("edge_media_preview_comment", {}).get("count", 0),
+        "views": post_data.get("video_view_count") if post_data.get("is_video") else None,
+        "caption": post_data.get("edge_media_to_caption", {}).get("edges", [{}])[0].get("node", {}).get("text", ""),
+        "owner": {
+            "username": post_data.get("owner", {}).get("username"),
+            "full_name": post_data.get("owner", {}).get("full_name"),
+            "is_verified": post_data.get("owner", {}).get("is_verified"),
+        },
+        "thumbnail_url": post_data.get("thumbnail_src"),
+        "display_url": post_data.get("display_url"),
+        "timestamp": post_data.get("taken_at_timestamp"),
+        "shares": None, 
+    }
 
-def fetch_tiktok_video_data(url):
-    response = requests.get(f"{ENSEMBLE_ROOT}/tt/post/info", params={"url": url, "token": ENSEMBLE_API_KEY})
-    return handle_response(response)
+    return metrics
 
-def fetch_tiktok_photo_data(url):
-    modified_url = url.replace("/photo/", "/video/")
-    response = requests.get(f"{ENSEMBLE_ROOT}/tt/post/info", params={"url": modified_url, "token": ENSEMBLE_API_KEY})
-    return handle_response(response)
+# Function to extract TikTok metrics
+def extract_tiktok_metrics(data):
+    video_data = data.get("data", [])[0]
 
+    metrics = {
+        "id": video_data.get("aweme_id"),
+        "description": video_data.get("desc", ""),
+        "likes": video_data.get("statistics", {}).get("digg_count", 0),
+        "comments": video_data.get("statistics", {}).get("comment_count", 0),
+        "views": video_data.get("statistics", {}).get("play_count", 0),
+        "shares": video_data.get("statistics", {}).get("share_count", 0),
+        "reposts": video_data.get("statistics", {}).get("repost_count", 0),
+        "music": {
+            "title": video_data.get("music", {}).get("title", ""),
+            "artist": video_data.get("music", {}).get("author", ""),
+        },
+        "owner": {
+            "username": video_data.get("author", {}).get("unique_id", ""),
+            "nickname": video_data.get("author", {}).get("nickname", ""),
+            "verified": video_data.get("author", {}).get("verification_type", 0) == 1,
+        },
+        "video_url": video_data.get("video", {}).get("play_addr", {}).get("url_list", [None])[0],
+        "thumbnail_url": video_data.get("video", {}).get("cover", {}).get("url_list", [None])[0],
+        "timestamp": video_data.get("create_time"),
+    }
 
-def fetch_instagram_post_data(url):
-    post_id = extract_instagram_id(url, "p")
-    if not post_id:
-        return {"error": "Could not extract Instagram post ID."}
-    
-    response = requests.get(
-        f"{ENSEMBLE_ROOT}/instagram/post/details",
-        params={"code": post_id, "n_comments_to_fetch": 0, "token": ENSEMBLE_API_KEY}
-    )
-    return handle_response(response)
+    return metrics
 
-def fetch_instagram_reel_data(url):
-    reel_id = extract_instagram_id(url, "reel") or extract_instagram_id(url, "reels")
-    if not reel_id:
-        return {"error": "Could not extract Instagram reel ID."}
-    
-    response = requests.get(
-        f"{ENSEMBLE_ROOT}/instagram/post/details",
-        params={"code": reel_id, "n_comments_to_fetch": 0, "token": ENSEMBLE_API_KEY}
-    )
-    
-    return handle_response(response)
-
-def handle_response(response):
-    try:
-        return response.json() if response.status_code == 200 else {"error": f"Failed: {response.status_code}"}
-    except json.JSONDecodeError:
-        return {"error": "Invalid JSON response."}
-
-def extract_instagram_id(url, content_type):
-    match = re.search(rf"instagram\.com/{content_type}/([\w-]+)", url)
-    return match.group(1) if match else None
-
-def save_as_json(data, filename):
-    if "error" in data:
-        print(f"Error: {data['error']}")
-        return
-    
-    with open(filename, "w") as f:
-        json.dump(data, f, indent=4)
-    print(f"Data saved to {filename}")
-    
-    wait_for_file(filename)
-
-    run_retrieve_info_script()
-
-def wait_for_file(filename):
-    while not os.path.exists(filename) or os.path.getsize(filename) == 0:
-        time.sleep(1)  
-
-def run_retrieve_info_script():
-    try:
-        subprocess.run(["python", "retrieveInfo.py"], check=True)
-        print("retrieveInfo.py executed successfully.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing retrieveInfo.py: {e}")
-
-def main():
-    url = input("Enter a TikTok or Instagram video URL: ")
-    data = fetch_video_data(url)
-    
-    if "error" not in data:
-        save_as_json(data, f"{get_platform(url)}_data.json")
+# Function to load JSON data if the file exists
+def load_json_file(filename):
+    if os.path.exists(filename):
+        with open(filename, "r") as file:
+            return json.load(file)
     else:
-        print(f"Error: {data['error']}")
+        print(f"File {filename} does not exist.")
+        return None
 
-if __name__ == "__main__":
-    main()
+# Load Instagram data from file
+instagram_data = load_json_file("./instagram_data.json")
+if instagram_data:
+    # Extract Instagram metrics
+    instagram_metrics = extract_instagram_metrics(instagram_data)
+
+    # Write Instagram metrics to CSV
+    instagram_csv_file_path = "instagram_metrics.csv"
+    instagram_header = [
+        "id", "shortcode", "is_video", "likes", "comments", "views", 
+        "caption", "owner_username", "owner_full_name", "owner_is_verified", 
+        "thumbnail_url", "display_url", "timestamp", "shares"
+    ]
+
+    with open(instagram_csv_file_path, mode="w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=instagram_header)
+        writer.writeheader()
+        instagram_metrics["owner_username"] = instagram_metrics["owner"].get("username")
+        instagram_metrics["owner_full_name"] = instagram_metrics["owner"].get("full_name")
+        instagram_metrics["owner_is_verified"] = instagram_metrics["owner"].get("is_verified")
+        del instagram_metrics["owner"]  # Remove nested "owner" dict
+        writer.writerow(instagram_metrics)
+
+    print("Instagram metrics have been written to CSV file.")
+
+    # Delete the Instagram JSON file after processing
+    os.remove("./instagram_data.json")
+    print("Instagram JSON file has been deleted.")
+
+# Load TikTok data from file
+tiktok_data = load_json_file("./tiktok_data.json")
+if tiktok_data:
+    # Extract TikTok metrics
+    tiktok_metrics = extract_tiktok_metrics(tiktok_data)
+
+    # Write TikTok metrics to CSV
+    tiktok_csv_file_path = "tiktok_metrics.csv"
+    tiktok_header = [
+        "id", "description", "likes", "comments", "views", "shares", 
+        "reposts", "music_title", "music_artist", 
+        "owner_username", "owner_nickname", "owner_verified", 
+        "video_url", "thumbnail_url", "timestamp"
+    ]
+
+    with open(tiktok_csv_file_path, mode="w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=tiktok_header)
+        writer.writeheader()
+        tiktok_metrics["music_title"] = tiktok_metrics["music"].get("title")
+        tiktok_metrics["music_artist"] = tiktok_metrics["music"].get("artist")
+        del tiktok_metrics["music"]  # Remove nested "music" dict
+        tiktok_metrics["owner_username"] = tiktok_metrics["owner"].get("username")
+        tiktok_metrics["owner_nickname"] = tiktok_metrics["owner"].get("nickname")
+        tiktok_metrics["owner_verified"] = tiktok_metrics["owner"].get("verified")
+        del tiktok_metrics["owner"]  # Remove nested "owner" dict
+        writer.writerow(tiktok_metrics)
+
+    print("TikTok metrics have been written to CSV file.")
+
+    # Delete the TikTok JSON file after processing
+    os.remove("./tiktok_data.json")
+    print("TikTok JSON file has been deleted.")
