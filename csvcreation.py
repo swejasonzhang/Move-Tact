@@ -19,10 +19,16 @@ def get_platform(url):
     return None
 
 def get_content_type(url):
-    if "tiktok.com" in url and "/video/" in url:
-        return "video"
-    if "instagram.com" in url and "/p/" in url:
-        return "post"
+    if "tiktok.com" in url:
+        if "/video/" in url:
+            return "video"
+        if "/photo/" in url:
+            return "photo"
+    if "instagram.com" in url:
+        if "/p/" in url:
+            return "post"
+        if "/reel/" in url or "/reels/" in url:
+            return "reel"
     return None
 
 def fetch_video_data(url):
@@ -32,21 +38,42 @@ def fetch_video_data(url):
     if not platform or not content_type:
         return {"error": "Unsupported platform or content type."}
     
-    return fetch_tiktok_data(url) if platform == "tiktok" else fetch_instagram_data(url)
+    if platform == "tiktok":
+        return fetch_tiktok_video_data(url) if content_type == "video" else fetch_tiktok_photo_data(url)
+    elif platform == "instagram":
+        return fetch_instagram_post_data(url) if content_type == "post" else fetch_instagram_reel_data(url)
 
-def fetch_tiktok_data(url):
+def fetch_tiktok_video_data(url):
     response = requests.get(f"{ENSEMBLE_ROOT}/tt/post/info", params={"url": url, "token": ENSEMBLE_API_KEY})
     return handle_response(response)
 
-def fetch_instagram_data(url):
-    video_id = extract_instagram_video_id(url)
-    if not video_id:
-        return {"error": "Could not extract Instagram video ID."}
+def fetch_tiktok_photo_data(url):
+    modified_url = url.replace("/photo/", "/video/")
+    response = requests.get(f"{ENSEMBLE_ROOT}/tt/post/info", params={"url": modified_url, "token": ENSEMBLE_API_KEY})
+    return handle_response(response)
+
+
+def fetch_instagram_post_data(url):
+    post_id = extract_instagram_id(url, "p")
+    if not post_id:
+        return {"error": "Could not extract Instagram post ID."}
     
     response = requests.get(
         f"{ENSEMBLE_ROOT}/instagram/post/details",
-        params={"code": video_id, "n_comments_to_fetch": 0, "token": ENSEMBLE_API_KEY}
+        params={"code": post_id, "n_comments_to_fetch": 0, "token": ENSEMBLE_API_KEY}
     )
+    return handle_response(response)
+
+def fetch_instagram_reel_data(url):
+    reel_id = extract_instagram_id(url, "reel") or extract_instagram_id(url, "reels")
+    if not reel_id:
+        return {"error": "Could not extract Instagram reel ID."}
+    
+    response = requests.get(
+        f"{ENSEMBLE_ROOT}/instagram/post/details",
+        params={"code": reel_id, "n_comments_to_fetch": 0, "token": ENSEMBLE_API_KEY}
+    )
+    
     return handle_response(response)
 
 def handle_response(response):
@@ -55,8 +82,8 @@ def handle_response(response):
     except json.JSONDecodeError:
         return {"error": "Invalid JSON response."}
 
-def extract_instagram_video_id(url):
-    match = re.search(r"instagram\.com/p/([\w-]+)", url)
+def extract_instagram_id(url, content_type):
+    match = re.search(rf"instagram\.com/{content_type}/([\w-]+)", url)
     return match.group(1) if match else None
 
 def save_as_json(data, filename):
