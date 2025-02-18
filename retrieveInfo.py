@@ -105,7 +105,7 @@ def wait_for_file(filename):
 
 def run_retrieve_info_script():
     try:
-        subprocess.run(["python", "retrieveInfo.py"], check=True)
+        subprocess.run(["python", "csvcreation.py"], check=True)
         print("retrieveInfo.py executed successfully.")
     except subprocess.CalledProcessError as e:
         print(f"Error executing retrieveInfo.py: {e}")
