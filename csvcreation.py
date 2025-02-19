@@ -2,10 +2,9 @@ import json
 import csv
 import os
 
-# Function to extract Instagram metrics
 def extract_instagram_metrics(data):
     post_data = data.get("data", {})
-    
+
     metrics = {
         "id": post_data.get("id"),
         "shortcode": post_data.get("shortcode"),
@@ -22,14 +21,18 @@ def extract_instagram_metrics(data):
         "thumbnail_url": post_data.get("thumbnail_src"),
         "display_url": post_data.get("display_url"),
         "timestamp": post_data.get("taken_at_timestamp"),
-        "shares": None, 
+        "shares": None,
+        "audio_url": post_data.get("clips_music_attribution_info", {}).get("audio_url", ""),
+        "audio_title": post_data.get("clips_music_attribution_info", {}).get("song_name", ""),
+        "audio_artist": post_data.get("clips_music_attribution_info", {}).get("artist_name", ""),
     }
 
     return metrics
 
-# Function to extract TikTok metrics
 def extract_tiktok_metrics(data):
     video_data = data.get("data", [])[0]
+    music = video_data.get("music", {})
+    song_url = music.get("play_url", {}).get("uri", "")
 
     metrics = {
         "id": video_data.get("aweme_id"),
@@ -40,8 +43,12 @@ def extract_tiktok_metrics(data):
         "shares": video_data.get("statistics", {}).get("share_count", 0),
         "reposts": video_data.get("statistics", {}).get("repost_count", 0),
         "music": {
-            "title": video_data.get("music", {}).get("title", ""),
-            "artist": video_data.get("music", {}).get("author", ""),
+            "title": music.get("title", ""),
+            "artist": music.get("author", ""),
+            "song_link": song_url,
+            "song_id": music.get("id", ""),
+            "sound_id": music.get("mid", ""),
+            "ugc": int(video_data.get("ugc_count", 0)) if video_data.get("ugc_count", '0').isdigit() and int(video_data.get("ugc_count", 0)) > 0 else None,
         },
         "owner": {
             "username": video_data.get("author", {}).get("unique_id", ""),
@@ -55,27 +62,21 @@ def extract_tiktok_metrics(data):
 
     return metrics
 
-# Function to load JSON data if the file exists
 def load_json_file(filename):
     if os.path.exists(filename):
         with open(filename, "r") as file:
             return json.load(file)
-    else:
-        print(f"File {filename} does not exist.")
-        return None
+    return None
 
-# Load Instagram data from file
 instagram_data = load_json_file("./instagram_data.json")
 if instagram_data:
-    # Extract Instagram metrics
     instagram_metrics = extract_instagram_metrics(instagram_data)
-
-    # Write Instagram metrics to CSV
     instagram_csv_file_path = "instagram_metrics.csv"
     instagram_header = [
         "id", "shortcode", "is_video", "likes", "comments", "views", 
         "caption", "owner_username", "owner_full_name", "owner_is_verified", 
-        "thumbnail_url", "display_url", "timestamp", "shares"
+        "thumbnail_url", "display_url", "timestamp", "shares", 
+        "audio_url", "audio_title", "audio_artist"
     ]
 
     with open(instagram_csv_file_path, mode="w", newline="") as file:
@@ -84,26 +85,18 @@ if instagram_data:
         instagram_metrics["owner_username"] = instagram_metrics["owner"].get("username")
         instagram_metrics["owner_full_name"] = instagram_metrics["owner"].get("full_name")
         instagram_metrics["owner_is_verified"] = instagram_metrics["owner"].get("is_verified")
-        del instagram_metrics["owner"]  # Remove nested "owner" dict
+        del instagram_metrics["owner"]
         writer.writerow(instagram_metrics)
 
-    print("Instagram metrics have been written to CSV file.")
-
-    # Delete the Instagram JSON file after processing
     os.remove("./instagram_data.json")
-    print("Instagram JSON file has been deleted.")
 
-# Load TikTok data from file
 tiktok_data = load_json_file("./tiktok_data.json")
 if tiktok_data:
-    # Extract TikTok metrics
     tiktok_metrics = extract_tiktok_metrics(tiktok_data)
-
-    # Write TikTok metrics to CSV
     tiktok_csv_file_path = "tiktok_metrics.csv"
     tiktok_header = [
         "id", "description", "likes", "comments", "views", "shares", 
-        "reposts", "music_title", "music_artist", 
+        "reposts", "music_title", "music_artist", "song_link", "song_id", "sound_id", "ugc",
         "owner_username", "owner_nickname", "owner_verified", 
         "video_url", "thumbnail_url", "timestamp"
     ]
@@ -113,15 +106,15 @@ if tiktok_data:
         writer.writeheader()
         tiktok_metrics["music_title"] = tiktok_metrics["music"].get("title")
         tiktok_metrics["music_artist"] = tiktok_metrics["music"].get("artist")
-        del tiktok_metrics["music"]  # Remove nested "music" dict
+        tiktok_metrics["song_link"] = tiktok_metrics["music"].get("song_link")
+        tiktok_metrics["song_id"] = tiktok_metrics["music"].get("song_id")
+        tiktok_metrics["sound_id"] = tiktok_metrics["music"].get("sound_id")
+        tiktok_metrics["ugc"] = tiktok_metrics["music"].get("ugc")
+        del tiktok_metrics["music"]
         tiktok_metrics["owner_username"] = tiktok_metrics["owner"].get("username")
         tiktok_metrics["owner_nickname"] = tiktok_metrics["owner"].get("nickname")
         tiktok_metrics["owner_verified"] = tiktok_metrics["owner"].get("verified")
-        del tiktok_metrics["owner"]  # Remove nested "owner" dict
+        del tiktok_metrics["owner"]
         writer.writerow(tiktok_metrics)
 
-    print("TikTok metrics have been written to CSV file.")
-
-    # Delete the TikTok JSON file after processing
     os.remove("./tiktok_data.json")
-    print("TikTok JSON file has been deleted.")
