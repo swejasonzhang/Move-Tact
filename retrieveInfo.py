@@ -4,7 +4,6 @@ import requests
 import re
 import json
 import time
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -60,8 +59,6 @@ def fetch_tiktok_video_data(url):
         if music_id:
             music_title_clean = clean_music_title(music_title)
             music_url = f"https://www.tiktok.com/music/{music_title_clean}-{music_id}"
-            print(f"Music URL: {music_url}")
-            
             video_count_data = get_video_count_from_music_url(music_url)
             
             if video_count_data and "video_count" in video_count_data:
@@ -111,27 +108,23 @@ def extract_instagram_id(url, content_type):
 
 def save_as_json(data, filename):
     if "error" in data:
-        print(f"Error: {data['error']}")
         return
     
     with open(filename, "w") as f:
         json.dump(data, f, indent=4)
-    print(f"Data saved to {filename}")
-    
+
     wait_for_file(filename)
     run_retrieve_info_script()
 
 def wait_for_file(filename):
     while not os.path.exists(filename) or os.path.getsize(filename) == 0:
         time.sleep(1)
-    print(f"{filename} is ready.")
 
 def run_retrieve_info_script():
     try:
         subprocess.run(["python", "csvcreation.py"], check=True)
-        print("retrieveInfo.py executed successfully.")
     except subprocess.CalledProcessError as e:
-        print(f"Error executing retrieveInfo.py: {e}")
+        pass
 
 def get_video_count_from_music_url(music_url):
     driver = None
@@ -153,7 +146,6 @@ def get_video_count_from_music_url(music_url):
             strong_tag = video_count_element.find_element(By.TAG_NAME, "strong")
             video_count = strong_tag.text.strip()
         except Exception as e:
-            print(f"Error: Video count element not found. {e}")
             video_count = "Not found"
 
         data = {
@@ -164,11 +156,9 @@ def get_video_count_from_music_url(music_url):
         with open('music_data.json', 'w', encoding="utf-8") as json_file:
             json.dump(data, json_file, indent=4)
 
-        print("Data saved to music_data.json")
         return data
 
     except Exception as e:
-        print(f"Error while parsing HTML: {e}")
         return None
     finally:
         if driver:
@@ -182,15 +172,12 @@ def main():
         filename = f"{get_platform(url)}_data.json"
         save_as_json(data, filename)
         run_csv_creation_script()
-    else:
-        print(f"Error: {data['error']}")
 
 def run_csv_creation_script():
     try:
         subprocess.run(["python", "csvcreation.py"], check=True)
-        print("csvcreation.py executed successfully.")
     except subprocess.CalledProcessError as e:
-        print(f"Error executing csvcreation.py: {e}")
+        pass
 
 if __name__ == "__main__":
     main()

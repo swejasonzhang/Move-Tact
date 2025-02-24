@@ -6,9 +6,8 @@ import subprocess
 def extract_instagram_metrics(data):
     post = data.get("data", {})
     owner = post.get("owner", {})
-    caption_edges = post.get("edge_media_to_caption", {}).get("edges", [{}])
-    caption = caption_edges[0].get("node", {}).get("text", "") if caption_edges else ""
-
+    caption = post.get("edge_media_to_caption", {}).get("edges", [{}])[0].get("node", {}).get("text", "") if post.get("edge_media_to_caption") else ""
+    
     return {
         "id": post.get("id"),
         "shortcode": post.get("shortcode"),
@@ -103,14 +102,13 @@ def process_tiktok_data():
 def main():
     process_instagram_data()
     process_tiktok_data()
-    run_upload_sheet_script() 
+    run_upload_sheet_script()
 
 def run_upload_sheet_script():
     try:
         subprocess.run(["python", "uploadSheets.py"], check=True)
-        print("uploadSheet.py executed successfully.")
     except subprocess.CalledProcessError as e:
-        print(f"Error executing uploadSheet.py: {e}")
+        pass
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,5 @@
 import pandas as pd
 import os
-import time
 from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -58,7 +57,6 @@ def upload_csv_to_sheet(service, spreadsheet_id, csv_file):
 
     df = convert_urls_to_hyperlinks(df, new_headers)
 
-    # Convert numbers to strings (no scientific notation)
     for col in df.select_dtypes(include=['float64', 'int64']).columns:
         df[col] = df[col].apply(lambda x: f"{x:.0f}")
 
@@ -83,7 +81,6 @@ def upload_csv_to_sheet(service, spreadsheet_id, csv_file):
     auto_resize_columns(service, spreadsheet_id, sheet_name)
     print(f"✅ Successfully uploaded data to '{sheet_name}'.")
 
-    # Immediately create the marker file to avoid waiting
     marker_file = f"{csv_file}_uploaded"
     try:
         with open(marker_file, 'w') as f:
@@ -92,22 +89,19 @@ def upload_csv_to_sheet(service, spreadsheet_id, csv_file):
     except Exception as e:
         print(f"❌ Error creating marker file: {e}")
 
-    # Cleanup: delete the CSV file after the marker file is handled
     try:
         os.remove(csv_file)
         print(f"🗑️ Deleted CSV file: {csv_file}")
     except Exception as e:
         print(f"❌ Error deleting CSV file: {e}")
     
-    # After everything is completed, delete the marker file
     try:
         os.remove(marker_file)
         print(f"🗑️ Deleted marker file: {marker_file}")
     except Exception as e:
         print(f"❌ Error deleting marker file: {e}")
 
-        
-# Main process
+
 existing_files = [file for file in csv_files if os.path.exists(file)]
 
 if len(existing_files) == 1:
