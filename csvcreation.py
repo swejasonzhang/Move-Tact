@@ -3,130 +3,105 @@ import csv
 import os
 
 def extract_instagram_metrics(data):
-    post_data = data.get("data", {})
+    post = data.get("data", {})
+    owner = post.get("owner", {})
+    caption_edges = post.get("edge_media_to_caption", {}).get("edges", [{}])
+    caption = caption_edges[0].get("node", {}).get("text", "") if caption_edges else ""
 
-    metrics = {
-        "id": post_data.get("id"),
-        "shortcode": post_data.get("shortcode"),
-        "is_video": post_data.get("is_video"),
-        "likes": post_data.get("edge_media_preview_like", {}).get("count", 0),
-        "comments": post_data.get("edge_media_preview_comment", {}).get("count", 0),
-        "views": post_data.get("video_view_count") if post_data.get("is_video") else None,
-        "caption": post_data.get("edge_media_to_caption", {}).get("edges", [{}])[0].get("node", {}).get("text", ""),
-        "owner": {
-            "username": post_data.get("owner", {}).get("username"),
-            "full_name": post_data.get("owner", {}).get("full_name"),
-            "is_verified": post_data.get("owner", {}).get("is_verified"),
-        },
-        "thumbnail_url": post_data.get("thumbnail_src"),
-        "display_url": post_data.get("display_url"),
-        "timestamp": post_data.get("taken_at_timestamp"),
+    return {
+        "id": post.get("id"),
+        "shortcode": post.get("shortcode"),
+        "is_video": post.get("is_video"),
+        "likes": post.get("edge_media_preview_like", {}).get("count", 0),
+        "comments": post.get("edge_media_preview_comment", {}).get("count", 0),
+        "views": post.get("video_view_count") if post.get("is_video") else None,
+        "caption": caption,
+        "owner_username": owner.get("username"),
+        "owner_full_name": owner.get("full_name"),
+        "owner_is_verified": owner.get("is_verified"),
+        "thumbnail_url": post.get("thumbnail_src"),
+        "display_url": post.get("display_url"),
+        "timestamp": post.get("taken_at_timestamp"),
         "shares": None,
-        "audio_url": post_data.get("clips_music_attribution_info", {}).get("audio_url", ""),
-        "audio_title": post_data.get("clips_music_attribution_info", {}).get("song_name", ""),
-        "audio_artist": post_data.get("clips_music_attribution_info", {}).get("artist_name", ""),
+        "audio_url": post.get("clips_music_attribution_info", {}).get("audio_url", ""),
+        "audio_title": post.get("clips_music_attribution_info", {}).get("song_name", ""),
+        "audio_artist": post.get("clips_music_attribution_info", {}).get("artist_name", "")
     }
-
-    return metrics
 
 def extract_tiktok_metrics(data, music_data=None):
-    video_data = data.get("data", [])[0]
-    music = video_data.get("music", {})
-    song_url = music.get("play_url", {}).get("uri", "")
+    video = data.get("data", [{}])[0]
+    music = video.get("music", {})
 
-    # Extract video count from music_data if available
-    video_count = None
-    if music_data and "video_count" in music_data:
-        video_count = music_data["video_count"]
-
-    metrics = {
-        "id": video_data.get("aweme_id"),
-        "description": video_data.get("desc", ""),
-        "likes": video_data.get("statistics", {}).get("digg_count", 0),
-        "comments": video_data.get("statistics", {}).get("comment_count", 0),
-        "views": video_data.get("statistics", {}).get("play_count", 0),
-        "shares": video_data.get("statistics", {}).get("share_count", 0),
-        "reposts": video_data.get("statistics", {}).get("repost_count", 0),
-        "music": {
-            "title": music.get("title", ""),
-            "artist": music.get("author", ""),
-            "song_link": song_url,
-            "song_id": music.get("id", ""),
-            "sound_id": music.get("mid", ""),
-            "ugc": int(video_data.get("ugc_count", 0)) if video_data.get("ugc_count", '0').isdigit() and int(video_data.get("ugc_count", 0)) > 0 else None,
-            "video_count": video_count,  # Add video count to music metrics
-        },
-        "owner": {
-            "username": video_data.get("author", {}).get("unique_id", ""),
-            "nickname": video_data.get("author", {}).get("nickname", ""),
-            "verified": video_data.get("author", {}).get("verification_type", 0) == 1,
-        },
-        "video_url": video_data.get("video", {}).get("play_addr", {}).get("url_list", [None])[0],
-        "thumbnail_url": video_data.get("video", {}).get("cover", {}).get("url_list", [None])[0],
-        "timestamp": video_data.get("create_time"),
+    return {
+        "id": video.get("aweme_id"),
+        "description": video.get("desc", ""),
+        "likes": video.get("statistics", {}).get("digg_count", 0),
+        "comments": video.get("statistics", {}).get("comment_count", 0),
+        "views": video.get("statistics", {}).get("play_count", 0),
+        "shares": video.get("statistics", {}).get("share_count", 0),
+        "reposts": video.get("statistics", {}).get("repost_count", 0),
+        "music_title": music.get("title", ""),
+        "music_artist": music.get("author", ""),
+        "song_link": music.get("play_url", {}).get("uri", ""),
+        "song_id": music.get("id", ""),
+        "sound_id": music.get("mid", ""),
+        "ugc": music_data.get("video_count") if music_data else None,
+        "owner_username": video.get("author", {}).get("unique_id", ""),
+        "owner_nickname": video.get("author", {}).get("nickname", ""),
+        "owner_verified": video.get("author", {}).get("verification_type", 0) == 1,
+        "video_url": video.get("video", {}).get("play_addr", {}).get("url_list", [None])[0],
+        "thumbnail_url": video.get("video", {}).get("cover", {}).get("url_list", [None])[0],
+        "timestamp": video.get("create_time")
     }
 
-    return metrics
-
-def load_json_file(filename):
+def load_json(filename):
     if os.path.exists(filename):
         with open(filename, "r") as file:
             return json.load(file)
     return None
 
-# Load Instagram data
-instagram_data = load_json_file("./instagram_data.json")
-if instagram_data:
-    instagram_metrics = extract_instagram_metrics(instagram_data)
-    instagram_csv_file_path = "instagram_metrics.csv"
-    instagram_header = [
-        "id", "shortcode", "is_video", "likes", "comments", "views", 
-        "caption", "owner_username", "owner_full_name", "owner_is_verified", 
-        "thumbnail_url", "display_url", "timestamp", "shares", 
+def save_to_csv(filepath, headers, data):
+    with open(filepath, mode="w", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=headers)
+        writer.writeheader()
+        writer.writerow(data)
+
+def process_instagram_data():
+    data = load_json("./instagram_data.json")
+    if not data:
+        return
+
+    metrics = extract_instagram_metrics(data)
+    headers = [
+        "id", "shortcode", "is_video", "likes", "comments", "views",
+        "caption", "owner_username", "owner_full_name", "owner_is_verified",
+        "thumbnail_url", "display_url", "timestamp", "shares",
         "audio_url", "audio_title", "audio_artist"
     ]
-
-    with open(instagram_csv_file_path, mode="w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=instagram_header)
-        writer.writeheader()
-        instagram_metrics["owner_username"] = instagram_metrics["owner"].get("username")
-        instagram_metrics["owner_full_name"] = instagram_metrics["owner"].get("full_name")
-        instagram_metrics["owner_is_verified"] = instagram_metrics["owner"].get("is_verified")
-        del instagram_metrics["owner"]
-        writer.writerow(instagram_metrics)
-
+    save_to_csv("instagram_metrics.csv", headers, metrics)
     os.remove("./instagram_data.json")
 
-# Load TikTok data
-tiktok_data = load_json_file("./tiktok_data.json")
-music_data = load_json_file("./music_data.json")  # Load music data
-if tiktok_data:
-    tiktok_metrics = extract_tiktok_metrics(tiktok_data, music_data)  # Pass music_data to extract_tiktok_metrics
-    tiktok_csv_file_path = "tiktok_metrics.csv"
-    tiktok_header = [
-        "id", "description", "likes", "comments", "views", "shares", 
-        "reposts", "music_title", "music_artist", "song_link", "song_id", "sound_id", "ugc", "video_count",
-        "owner_username", "owner_nickname", "owner_verified", 
-        "video_url", "thumbnail_url", "timestamp"
+def process_tiktok_data():
+    data = load_json("./tiktok_data.json")
+    music_data = load_json("./music_data.json")
+    if not data:
+        return
+
+    metrics = extract_tiktok_metrics(data, music_data)
+    headers = [
+        "id", "description", "likes", "comments", "views", "shares",
+        "reposts", "music_title", "music_artist", "song_link", "song_id",
+        "sound_id", "ugc", "owner_username", "owner_nickname",
+        "owner_verified", "video_url", "thumbnail_url", "timestamp"
     ]
-
-    with open(tiktok_csv_file_path, mode="w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=tiktok_header)
-        writer.writeheader()
-        tiktok_metrics["music_title"] = tiktok_metrics["music"].get("title")
-        tiktok_metrics["music_artist"] = tiktok_metrics["music"].get("artist")
-        tiktok_metrics["song_link"] = tiktok_metrics["music"].get("song_link")
-        tiktok_metrics["song_id"] = tiktok_metrics["music"].get("song_id")
-        tiktok_metrics["sound_id"] = tiktok_metrics["music"].get("sound_id")
-        tiktok_metrics["ugc"] = tiktok_metrics["music"].get("ugc")
-        tiktok_metrics["video_count"] = tiktok_metrics["music"].get("video_count")  # Add video count
-        del tiktok_metrics["music"]
-        tiktok_metrics["owner_username"] = tiktok_metrics["owner"].get("username")
-        tiktok_metrics["owner_nickname"] = tiktok_metrics["owner"].get("nickname")
-        tiktok_metrics["owner_verified"] = tiktok_metrics["owner"].get("verified")
-        del tiktok_metrics["owner"]
-        writer.writerow(tiktok_metrics)
-
+    save_to_csv("tiktok_metrics.csv", headers, metrics)
     os.remove("./tiktok_data.json")
     if music_data:
-        os.remove("./music_data.json")  # Remove music_data.json after processing
+        os.remove("./music_data.json")
+
+def main():
+    process_instagram_data()
+    process_tiktok_data()
+
+if __name__ == "__main__":
+    main()

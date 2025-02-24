@@ -16,7 +16,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 # Load environment variables
 load_dotenv()
-
 ENSEMBLE_API_KEY = os.getenv("ENSEMBLE_API_KEY")
 ENSEMBLE_ROOT = os.getenv("ENSEMBLE_ROOT")
 
@@ -38,7 +37,7 @@ def clean_music_title(title):
     return title.replace(' ', '-').replace('(', '').replace(')', '').replace(',', '').replace('!', '').replace('.', '')
 
 def fetch_video_data(url):
-    platform = get_platform(url) 
+    platform = get_platform(url)
     content_type = get_content_type(url)
     
     if not platform or not content_type:
@@ -99,7 +98,6 @@ def fetch_instagram_reel_data(url):
         f"{ENSEMBLE_ROOT}/instagram/post/details",
         params={"code": reel_id, "n_comments_to_fetch": 0, "token": ENSEMBLE_API_KEY}
     )
-    
     return handle_response(response)
 
 def handle_response(response):
@@ -137,23 +135,18 @@ def run_retrieve_info_script():
         print(f"Error executing retrieveInfo.py: {e}")
 
 def get_video_count_from_music_url(music_url):
-    driver = None  # Initialize driver outside the try block
+    driver = None
     try:
-        # Set up Selenium options
         chrome_options = Options()
-        # chrome_options.add_argument("--headless")  # Disable headless mode for debugging
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
-        # Set up the WebDriver using webdriver-manager
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        # Open the URL
         driver.get(music_url)
 
-        # Wait for the video count element to appear
         try:
             video_count_element = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'h2[data-e2e="music-video-count"]'))
@@ -165,13 +158,11 @@ def get_video_count_from_music_url(music_url):
             print(f"Error: Video count element not found. {e}")
             video_count = "Not found"
 
-        # Prepare the data
         data = {
             'url': music_url,
             'video_count': video_count
         }
 
-        # Save the data to a JSON file
         with open('music_data.json', 'w', encoding="utf-8") as json_file:
             json.dump(data, json_file, indent=4)
 
@@ -182,8 +173,8 @@ def get_video_count_from_music_url(music_url):
         print(f"Error while parsing HTML: {e}")
         return None
     finally:
-        if driver:  # Ensure driver is defined before calling quit
-            driver.quit()  # Close the browser
+        if driver:
+            driver.quit()
 
 def main():
     url = input("Enter a TikTok or Instagram video URL: ")
