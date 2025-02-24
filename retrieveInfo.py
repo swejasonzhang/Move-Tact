@@ -14,7 +14,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
-# Load environment variables
 load_dotenv()
 ENSEMBLE_API_KEY = os.getenv("ENSEMBLE_API_KEY")
 ENSEMBLE_ROOT = os.getenv("ENSEMBLE_ROOT")
@@ -153,7 +152,6 @@ def get_video_count_from_music_url(music_url):
             )
             strong_tag = video_count_element.find_element(By.TAG_NAME, "strong")
             video_count = strong_tag.text.strip()
-            print(f"Video count: {video_count}")
         except Exception as e:
             print(f"Error: Video count element not found. {e}")
             video_count = "Not found"
@@ -181,9 +179,18 @@ def main():
     data = fetch_video_data(url)
     
     if "error" not in data:
-        save_as_json(data, f"{get_platform(url)}_data.json")
+        filename = f"{get_platform(url)}_data.json"
+        save_as_json(data, filename)
+        run_csv_creation_script()
     else:
         print(f"Error: {data['error']}")
+
+def run_csv_creation_script():
+    try:
+        subprocess.run(["python", "csvcreation.py"], check=True)
+        print("csvcreation.py executed successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing csvcreation.py: {e}")
 
 if __name__ == "__main__":
     main()

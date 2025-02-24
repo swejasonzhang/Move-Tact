@@ -1,6 +1,7 @@
 import json
 import csv
 import os
+import subprocess
 
 def extract_instagram_metrics(data):
     post = data.get("data", {})
@@ -102,6 +103,14 @@ def process_tiktok_data():
 def main():
     process_instagram_data()
     process_tiktok_data()
+    run_upload_sheet_script() 
+
+def run_upload_sheet_script():
+    try:
+        subprocess.run(["python", "uploadSheets.py"], check=True)
+        print("uploadSheet.py executed successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing uploadSheet.py: {e}")
 
 if __name__ == "__main__":
     main()
