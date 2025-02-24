@@ -6,7 +6,15 @@ import json
 import time
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 
+# Load environment variables
 load_dotenv()
 
 ENSEMBLE_API_KEY = os.getenv("ENSEMBLE_API_KEY")
@@ -56,10 +64,10 @@ def fetch_tiktok_video_data(url):
             music_url = f"https://www.tiktok.com/music/{music_title_clean}-{music_id}"
             print(f"Music URL: {music_url}")
             
-            user_count_data = get_user_count_from_music_url(music_url)
+            video_count_data = get_video_count_from_music_url(music_url)
             
-            if user_count_data and "view_count" in user_count_data:
-                video_data["ugc_count"] = user_count_data["view_count"]
+            if video_count_data and "video_count" in video_count_data:
+                video_data["video_count"] = video_count_data["video_count"]
                 video_data["music_title"] = music_title
                 video_data["song_link"] = music_url
 
@@ -128,57 +136,54 @@ def run_retrieve_info_script():
     except subprocess.CalledProcessError as e:
         print(f"Error executing retrieveInfo.py: {e}")
 
-def get_user_count_from_music_url(music_url):
-    # Send a GET request to the music URL
-    response = requests.get(music_url)
-    
-    # Check if the request was successful
-    if response.status_code == 200:
+def get_video_count_from_music_url(music_url):
+    driver = None  # Initialize driver outside the try block
+    try:
+        # Set up Selenium options
+        chrome_options = Options()
+        # chrome_options.add_argument("--headless")  # Disable headless mode for debugging
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+        # Set up the WebDriver using webdriver-manager
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+
+        # Open the URL
+        driver.get(music_url)
+
+        # Wait for the video count element to appear
         try:
-            # Parse the response as HTML
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Find the <h2> element with the specified data-e2e attribute and title="views"
-            view_count_element = soup.find('h2', {'data-e2e': 'music-video-count', 'title': 'views'})
-            
-            print(view_count_element)
-            
-            # Check if the element was found
-            if view_count_element:
-                # Extract the text content (view count)
-                view_count = view_count_element.text.strip()
-            else:
-                view_count = "Not found"
-            
-            # Extract just the song name and ID
-            music_url_parts = music_url.split('-')
-            song_name = '-'.join(music_url_parts[:-1])  # Everything except the last part
-            music_id = music_url_parts[-1]  # The last part is the ID
-            
-            print(song_name)
-            
-            # Rebuild the music URL without the author part
-            cleaned_music_url = f"{song_name}-{music_id}"
-            
-            # Construct a JSON object with the extracted view count
-            data = {
-                'url': cleaned_music_url,
-                'view_count': view_count
-            }
-            
-            # Save the response data into a JSON file
-            with open('music_data.json', 'w') as json_file:
-                json.dump(data, json_file, indent=4)  # Pretty-print JSON
-            
-            print("Data saved to music_data.json")
-            return data  # Return the parsed data if needed
-        
+            video_count_element = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'h2[data-e2e="music-video-count"]'))
+            )
+            strong_tag = video_count_element.find_element(By.TAG_NAME, "strong")
+            video_count = strong_tag.text.strip()
+            print(f"Video count: {video_count}")
         except Exception as e:
-            print(f"Error while parsing HTML: {e}")
-            return None
-    else:
-        print(f"Error: Received status code {response.status_code}.")
+            print(f"Error: Video count element not found. {e}")
+            video_count = "Not found"
+
+        # Prepare the data
+        data = {
+            'url': music_url,
+            'video_count': video_count
+        }
+
+        # Save the data to a JSON file
+        with open('music_data.json', 'w', encoding="utf-8") as json_file:
+            json.dump(data, json_file, indent=4)
+
+        print("Data saved to music_data.json")
+        return data
+
+    except Exception as e:
+        print(f"Error while parsing HTML: {e}")
         return None
+    finally:
+        if driver:  # Ensure driver is defined before calling quit
+            driver.quit()  # Close the browser
 
 def main():
     url = input("Enter a TikTok or Instagram video URL: ")

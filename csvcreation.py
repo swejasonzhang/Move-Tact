@@ -29,10 +29,15 @@ def extract_instagram_metrics(data):
 
     return metrics
 
-def extract_tiktok_metrics(data):
+def extract_tiktok_metrics(data, music_data=None):
     video_data = data.get("data", [])[0]
     music = video_data.get("music", {})
     song_url = music.get("play_url", {}).get("uri", "")
+
+    # Extract video count from music_data if available
+    video_count = None
+    if music_data and "video_count" in music_data:
+        video_count = music_data["video_count"]
 
     metrics = {
         "id": video_data.get("aweme_id"),
@@ -49,6 +54,7 @@ def extract_tiktok_metrics(data):
             "song_id": music.get("id", ""),
             "sound_id": music.get("mid", ""),
             "ugc": int(video_data.get("ugc_count", 0)) if video_data.get("ugc_count", '0').isdigit() and int(video_data.get("ugc_count", 0)) > 0 else None,
+            "video_count": video_count,  # Add video count to music metrics
         },
         "owner": {
             "username": video_data.get("author", {}).get("unique_id", ""),
@@ -68,6 +74,7 @@ def load_json_file(filename):
             return json.load(file)
     return None
 
+# Load Instagram data
 instagram_data = load_json_file("./instagram_data.json")
 if instagram_data:
     instagram_metrics = extract_instagram_metrics(instagram_data)
@@ -90,13 +97,15 @@ if instagram_data:
 
     os.remove("./instagram_data.json")
 
+# Load TikTok data
 tiktok_data = load_json_file("./tiktok_data.json")
+music_data = load_json_file("./music_data.json")  # Load music data
 if tiktok_data:
-    tiktok_metrics = extract_tiktok_metrics(tiktok_data)
+    tiktok_metrics = extract_tiktok_metrics(tiktok_data, music_data)  # Pass music_data to extract_tiktok_metrics
     tiktok_csv_file_path = "tiktok_metrics.csv"
     tiktok_header = [
         "id", "description", "likes", "comments", "views", "shares", 
-        "reposts", "music_title", "music_artist", "song_link", "song_id", "sound_id", "ugc",
+        "reposts", "music_title", "music_artist", "song_link", "song_id", "sound_id", "ugc", "video_count",
         "owner_username", "owner_nickname", "owner_verified", 
         "video_url", "thumbnail_url", "timestamp"
     ]
@@ -110,6 +119,7 @@ if tiktok_data:
         tiktok_metrics["song_id"] = tiktok_metrics["music"].get("song_id")
         tiktok_metrics["sound_id"] = tiktok_metrics["music"].get("sound_id")
         tiktok_metrics["ugc"] = tiktok_metrics["music"].get("ugc")
+        tiktok_metrics["video_count"] = tiktok_metrics["music"].get("video_count")  # Add video count
         del tiktok_metrics["music"]
         tiktok_metrics["owner_username"] = tiktok_metrics["owner"].get("username")
         tiktok_metrics["owner_nickname"] = tiktok_metrics["owner"].get("nickname")
@@ -118,3 +128,5 @@ if tiktok_data:
         writer.writerow(tiktok_metrics)
 
     os.remove("./tiktok_data.json")
+    if music_data:
+        os.remove("./music_data.json")  # Remove music_data.json after processing
